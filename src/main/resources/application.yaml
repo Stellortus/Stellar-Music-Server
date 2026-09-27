@@ -1,0 +1,6 @@
+ktor:
+  deployment:
+    port: 1695
+  application:
+    modules:
+      - top.stellortus.stellar_music_server.RoutingKt.configureRouting
