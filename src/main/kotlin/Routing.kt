@@ -37,22 +37,31 @@ fun Application.configureRouting() {
         })
     }
     routing {
-        get("/latest") {
-            val dir = File(rootDir, "apks")
-            val latestApkName = File(dir, "latest_file_name")
-                .takeIf(File::exists)
-                ?.readText() ?: return@get call.respond(HttpStatusCode.BadRequest)
+        get("/download/{version}") {
+            val version = call.parameters["version"] ?: return@get call.respond(HttpStatusCode.BadRequest)
 
-            val latestApk = File(dir, latestApkName)
+            val dir = File(rootDir, "apks")
+
+            val apkName =
+                if (version == "latest") {
+                    File(dir, "latest_file_name")
+                        .takeIf(File::exists)
+                        ?.readText()?.trim() ?: return@get call.respond(HttpStatusCode.BadRequest)
+                } else {
+                    val fullVersion = if (version.startsWith('v')) version else "v$version"
+                    "Stellar_Music_${fullVersion}_release.apk"
+                }
+
+            val apkFile = File(dir, apkName)
                 .takeIf(File::exists) ?: return@get call.respond(HttpStatusCode.NotFound)
 
             call.response.header(
                 HttpHeaders.ContentDisposition,
                 ContentDisposition.Attachment.withParameter(
-                    ContentDisposition.Parameters.FileName, latestApkName
+                    ContentDisposition.Parameters.FileName, apkName
                 ).toString()
             )
-            call.respondFile(latestApk)
+            call.respondFile(apkFile)
         }
         get("/") {
             call.respondText("Hello World!", ContentType.Text.Plain)

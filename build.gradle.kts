@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "top.stellortus.stellar-music-server"
-version = "0.1"
+version = "0.2"
 
 application {
     mainClass = "io.ktor.server.netty.EngineMain"
