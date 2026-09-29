@@ -1,4 +1,4 @@
-package database.song
+package top.stellortus.stellar_music_server.database.track
 
 enum class TrackSort {
     NEWEST,     // 最新上传

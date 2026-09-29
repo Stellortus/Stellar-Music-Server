@@ -1,4 +1,4 @@
-package database.song
+package top.stellortus.stellar_music_server.database.track
 
 import org.jetbrains.exposed.sql.Table
 
