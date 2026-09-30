@@ -2,7 +2,7 @@ package top.stellortus.stellar_music_server.database.track
 
 import org.jetbrains.exposed.sql.Table
 
-object TrackTable : Table("songs") {
+object TrackTable : Table("tracks") {
     val id         = integer("id").autoIncrement()
     val title      = varchar("title", 255)
     val artists    = text("artists")                    // 存 JSON 数组字符串

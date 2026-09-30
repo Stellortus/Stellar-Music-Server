@@ -7,18 +7,11 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.io.File
 
-/**
- * 认证数据存取（users / sessions 表）。
- *
- * 使用独立的 [database] 连接，与 TrackRepository 使用的歌曲数据库互不干扰；
- * 所有查询显式通过 [database] 执行，不依赖 Exposed 的全局默认数据库。
- */
 class AuthRepository {
 
     lateinit var database: Database
         private set
 
-    /** 初始化数据库连接并建表（目录不存在时自动创建） */
     fun init(dbPath: String) {
         File(dbPath).parentFile?.mkdirs()
         database = Database.connect(
@@ -30,7 +23,6 @@ class AuthRepository {
         }
     }
 
-    /** 按用户名（严格匹配，区分大小写与空格）查用户，不存在返回 null */
     fun findByUsername(username: String): User? = transaction(database) {
         UsersTable.selectAll()
             .where { UsersTable.username eq username }
@@ -39,7 +31,6 @@ class AuthRepository {
             ?.toUser()
     }
 
-    /** 按用户名查用户及其密码哈希，用于登录校验，不存在返回 null */
     fun findCredentials(username: String): Pair<User, String>? = transaction(database) {
         UsersTable.selectAll()
             .where { UsersTable.username eq username }
@@ -48,7 +39,6 @@ class AuthRepository {
             ?.let { it.toUser() to it[UsersTable.passwordHash] }
     }
 
-    /** 创建用户，返回新用户 */
     fun createUser(username: String, passwordHash: String): User = transaction(database) {
         val newId = UsersTable.insert {
             it[UsersTable.username] = username
@@ -56,10 +46,15 @@ class AuthRepository {
             it[createdAt] = System.currentTimeMillis()
         } get UsersTable.id
 
-        User(id = newId, username = username)
+        User(id = newId, username = username, level = UserLevel.USER)
     }
 
-    /** 为用户创建一条 session，入库的是 token 摘要而非 token 本身 */
+    fun setLevel(userId: Int, level: UserLevel): Int = transaction(database) {
+        UsersTable.update({ UsersTable.id eq userId }) {
+            it[UsersTable.level] = level.value
+        }
+    }
+
     fun createSession(userId: Int, token: String) {
         val now = System.currentTimeMillis()
         transaction(database) {
@@ -72,12 +67,6 @@ class AuthRepository {
         }
     }
 
-    /**
-     * 按 token 查 session 对应的用户，并刷新该 session 的 [SessionsTable.lastUsedAt]。
-     *
-     * 距上次使用超过 [SESSION_IDLE_TIMEOUT_MS] 的 session 视为已过期：
-     * 就地删除并返回 null，调用方按未认证处理。
-     */
     fun findByToken(token: String): User? = transaction(database) {
         val now = System.currentTimeMillis()
 
@@ -104,19 +93,12 @@ class AuthRepository {
             ?.toUser()
     }
 
-    /** 删除指定 token 的 session（幂等） */
     fun deleteSession(token: String) {
         transaction(database) {
             SessionsTable.deleteWhere { SessionsTable.tokenHash eq TokenGenerator.hash(token) }
         }
     }
 
-    /**
-     * 清除所有空闲超时的 session，返回删除条数。
-     *
-     * [findByToken] 只在 token 被再次使用时才发现过期，长期无人使用的 session
-     * 需要靠本方法回收；目前尚未接入定时任务，需手动或另行调度调用。
-     */
     fun purgeExpiredSessions(): Int {
         val cutoff = System.currentTimeMillis() - SESSION_IDLE_TIMEOUT_MS
         return transaction(database) {
@@ -127,6 +109,7 @@ class AuthRepository {
     private fun ResultRow.toUser(): User = User(
         id = this[UsersTable.id],
         username = this[UsersTable.username],
+        level = UserLevel.fromValue(this[UsersTable.level]),
     )
 
     companion object {

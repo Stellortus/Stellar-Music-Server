@@ -10,7 +10,7 @@ data class RegisterRequest(val username: String, val password: String)
 data class LoginRequest(val username: String, val password: String)
 
 @Serializable
-data class UserResponse(val id: Int, val username: String)
+data class UserResponse(val id: Int, val username: String, val level: Int)
 
 @Serializable
 data class AuthResponse(val token: String, val user: UserResponse)
@@ -18,4 +18,4 @@ data class AuthResponse(val token: String, val user: UserResponse)
 @Serializable
 data class MessageResponse(val message: String)
 
-fun User.toResponse(): UserResponse = UserResponse(id = id, username = username)
+fun User.toResponse(): UserResponse = UserResponse(id = id, username = username, level = level.value)

@@ -8,11 +8,9 @@ import kotlin.test.*
 class ServerTest {
 
     @Test
-    fun `test root endpoint`() = testApplication {
-        // loads default configuration
+    fun `test track list endpoint`() = testApplication {
         configure()
-        // verify server root returns 200
-        assertEquals(HttpStatusCode.OK, client.get("/").status)
+        assertEquals(HttpStatusCode.OK, client.get("/track_list").status)
     }
 
 }

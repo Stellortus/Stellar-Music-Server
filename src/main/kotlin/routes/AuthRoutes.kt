@@ -1,17 +1,25 @@
-package top.stellortus.stellar_music_server.auth
+package top.stellortus.stellar_music_server.routes
 
 import top.stellortus.stellar_music_server.database.auth.AuthRepository
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
-import io.ktor.server.response.*
+import io.ktor.server.response.respond
 import io.ktor.server.routing.*
+import top.stellortus.stellar_music_server.auth.Argon2PasswordHasher
+import top.stellortus.stellar_music_server.auth.AuthResponse
+import top.stellortus.stellar_music_server.auth.LoginRequest
+import top.stellortus.stellar_music_server.auth.MessageResponse
+import top.stellortus.stellar_music_server.auth.RegisterRequest
+import top.stellortus.stellar_music_server.auth.TokenGenerator
+import top.stellortus.stellar_music_server.auth.bearerToken
+import top.stellortus.stellar_music_server.auth.requireUser
+import top.stellortus.stellar_music_server.auth.toResponse
 
-fun Route.authRoutes(repo: AuthRepository, passwordHasher: Argon2PasswordHasher) {
+fun Route.authRoutes(authRepo: AuthRepository, passwordHasher: Argon2PasswordHasher) {
 
     route("/auth") {
 
-        // 注册：成功即自动登录
         post("/register") {
             val req = call.parseOrNull<RegisterRequest>()
             val username = req?.username
@@ -23,30 +31,29 @@ fun Route.authRoutes(repo: AuthRepository, passwordHasher: Argon2PasswordHasher)
                     MessageResponse("用户名和密码不能为空")
                 )
             }
-            if (repo.findByUsername(username) != null) {
+            if (authRepo.findByUsername(username) != null) {
                 return@post call.respond(
                     HttpStatusCode.Conflict,
                     MessageResponse("用户名已存在")
                 )
             }
 
-            val user = repo.createUser(username, passwordHasher.hash(password))
+            val user = authRepo.createUser(username, passwordHasher.hash(password))
             val token = TokenGenerator.generate()
-            repo.createSession(user.id, token)
+            authRepo.createSession(user.id, token)
             call.respond(HttpStatusCode.OK, AuthResponse(token, user.toResponse()))
         }
 
-        // 登录
         post("/login") {
             val req = call.parseOrNull<LoginRequest>()
             val username = req?.username
             val password = req?.password ?: ""
 
-            val credentials = username?.takeIf { it.isNotEmpty() }?.let { repo.findCredentials(it) }
+            val credentials = username?.takeIf { it.isNotEmpty() }?.let { authRepo.findCredentials(it) }
             val user = credentials?.first
             val hash = credentials?.second
 
-            // 用户不存在时也拿假哈希算一次，让两条失败路径耗时一致，避免用响应时间枚举用户名
+            // Fake hash if user not exists
             val passwordMatches = passwordHasher.verify(password, hash ?: passwordHasher.dummyHash)
 
             if (user == null || hash == null || !passwordMatches) {
@@ -57,23 +64,17 @@ fun Route.authRoutes(repo: AuthRepository, passwordHasher: Argon2PasswordHasher)
             }
 
             val token = TokenGenerator.generate()
-            repo.createSession(user.id, token)
+            authRepo.createSession(user.id, token)
             call.respond(HttpStatusCode.OK, AuthResponse(token, user.toResponse()))
         }
 
-        // 当前用户信息（需要认证）
         get("/me") {
-            val user = call.authenticate(repo)
-                ?: return@get call.respond(
-                    HttpStatusCode.Unauthorized,
-                    MessageResponse("未登录或 token 无效")
-                )
+            val user = call.requireUser(authRepo) ?: return@get
             call.respond(HttpStatusCode.OK, user.toResponse())
         }
 
-        // 登出（幂等：token 不存在也返回 200）
         post("/logout") {
-            call.bearerToken()?.let { repo.deleteSession(it) }
+            call.bearerToken()?.let { authRepo.deleteSession(it) }
             call.respond(HttpStatusCode.OK, MessageResponse("ok"))
         }
     }
