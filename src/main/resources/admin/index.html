@@ -1,0 +1,730 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stellar Music 后台</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-2: #1e222b;
+    --border: #2a2f3a;
+    --text: #e6e8ee;
+    --muted: #9298a6;
+    --accent: #6d8bff;
+    --danger: #e5534b;
+    --ok: #3fb950;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  button {
+    font: inherit;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text);
+    padding: 6px 12px;
+    border-radius: 6px;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.danger { color: var(--danger); }
+  button.danger:hover { border-color: var(--danger); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  input, select, textarea {
+    font: inherit;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 10px;
+    width: 100%;
+  }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  label { display: block; margin: 12px 0 4px; color: var(--muted); font-size: 12px; }
+
+  /* 登录 */
+  #login {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .card {
+    width: 100%;
+    max-width: 360px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+  }
+  .card h1 { margin: 0 0 4px; font-size: 20px; }
+  .card .sub { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
+  .card button { width: 100%; margin-top: 20px; padding: 9px; }
+
+  /* 主界面 */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 20px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  header .brand { font-weight: 600; }
+  header .who { margin-left: auto; color: var(--muted); font-size: 13px; }
+  .badge {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    font-size: 12px;
+  }
+  nav { display: flex; gap: 8px; padding: 16px 20px 0; }
+  nav button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  main { padding: 16px 20px 60px; }
+  .toolbar { display: flex; gap: 10px; margin-bottom: 12px; align-items: center; }
+  .toolbar input { max-width: 320px; }
+  .toolbar .count { color: var(--muted); font-size: 12px; margin-left: auto; }
+
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  th { background: var(--panel-2); color: var(--muted); font-weight: 500; font-size: 12px; }
+  tr:last-child td { border-bottom: none; }
+  td.actions { white-space: nowrap; text-align: right; }
+  td.actions button { padding: 4px 9px; font-size: 12px; margin-left: 4px; }
+  td select { width: auto; min-width: 110px; padding: 4px 8px; }
+  .empty { color: var(--muted); padding: 24px; text-align: center; }
+
+  /* 提示条 */
+  #toast {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    padding: 10px 16px;
+    border-radius: 6px;
+    max-width: 360px;
+    z-index: 100;
+    display: none;
+  }
+  #toast.err { border-left-color: var(--danger); }
+  #toast.ok { border-left-color: var(--ok); }
+
+  /* 弹窗 */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    z-index: 50;
+  }
+  .overlay .card { max-width: 520px; }
+  .overlay h2 { margin: 0 0 8px; font-size: 17px; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
+  .modal-actions button { width: auto; margin-top: 0; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 12px; }
+  .track-list { max-height: 340px; overflow: auto; margin-top: 8px; border: 1px solid var(--border); border-radius: 8px; }
+  .track-list .row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .track-list .row:last-child { border-bottom: none; }
+  .track-list .row .meta { color: var(--muted); font-size: 12px; }
+  .track-list .row .meta.right { margin-left: auto; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- 登录 -->
+<div id="login">
+  <form class="card" id="login-form">
+    <h1>Stellar Music</h1>
+    <div class="sub">后台管理 · 请登录</div>
+    <label for="login-user">账号</label>
+    <input id="login-user" autocomplete="username" required>
+    <label for="login-pass">密码</label>
+    <input id="login-pass" type="password" autocomplete="current-password" required>
+    <button class="primary" type="submit" id="login-btn">登录</button>
+    <div class="hint" id="login-msg"></div>
+  </form>
+</div>
+
+<!-- 主界面 -->
+<div id="app" hidden>
+  <header>
+    <span class="brand">Stellar Music 后台</span>
+    <span class="who">
+      <span id="me-name"></span> · <span class="badge" id="me-level"></span>
+      <button id="logout" style="margin-left:12px">退出</button>
+    </span>
+  </header>
+
+  <nav>
+    <button data-tab="tracks" class="active">歌曲</button>
+    <button data-tab="users">用户</button>
+    <button data-tab="playlists">歌单</button>
+  </nav>
+
+  <main>
+    <section id="tab-tracks">
+      <div class="toolbar">
+        <input id="track-q" placeholder="搜索 歌名 / 歌手 / 文件名 / 上传者">
+        <button id="track-search">查询</button>
+        <span class="count" id="track-count"></span>
+      </div>
+      <div id="track-body"></div>
+      <div style="text-align:center;margin-top:12px">
+        <button id="track-more" hidden>加载更多</button>
+      </div>
+    </section>
+
+    <section id="tab-users" hidden>
+      <div class="toolbar">
+        <input id="user-q" placeholder="搜索用户名">
+        <button id="user-search">查询</button>
+        <span class="count" id="user-count"></span>
+      </div>
+      <div id="user-body"></div>
+      <div class="hint" id="user-hint"></div>
+    </section>
+
+    <section id="tab-playlists" hidden>
+      <div class="toolbar">
+        <input id="playlist-q" placeholder="搜索歌单名">
+        <button id="playlist-search">查询</button>
+        <span class="count" id="playlist-count"></span>
+      </div>
+      <div id="playlist-body"></div>
+    </section>
+  </main>
+</div>
+
+<div id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var TOKEN_KEY = 'stellar_admin_token';
+  var LEVEL = 20;
+  var state = {
+    meta: null,
+    levels: [],
+    assignable: [],
+    tracks: { q: '', offset: 0, items: [], total: 0 },
+    users: { q: '', items: [] },
+    playlists: { q: '', items: [] }
+  };
+
+  var $ = function (sel) { return document.querySelector(sel); };
+
+  function token() { return sessionStorage.getItem(TOKEN_KEY) || ''; }
+  function setToken(t) { sessionStorage.setItem(TOKEN_KEY, t); }
+  function clearToken() { sessionStorage.removeItem(TOKEN_KEY); }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  var toastTimer = null;
+  function toast(msg, kind) {
+    var el = $('#toast');
+    el.textContent = msg;
+    el.className = kind || '';
+    el.style.display = 'block';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.style.display = 'none'; }, 4000);
+  }
+
+  // 统一的后台 API 调用；401/403 时退回登录界面
+  function api(path, options) {
+    options = options || {};
+    var headers = { 'Content-Type': 'application/json' };
+    if (token()) headers['Authorization'] = 'Bearer ' + token();
+    if (options.headers) {
+      for (var k in options.headers) headers[k] = options.headers[k];
+    }
+
+    return fetch(path, {
+      method: options.method || 'GET',
+      headers: headers,
+      body: options.body
+    }).then(function (res) {
+      // 仅 401 视为会话失效，退回登录；403 可能是业务规则拒绝（如等级层级限制），
+      // 只提示错误，不能把用户踢出登录。
+      if (res.status === 401) {
+        clearToken();
+        showLogin('登录已失效，请重新登录');
+        var authErr = new Error('unauthorized');
+        authErr.status = 401;
+        throw authErr;
+      }
+      return res.text().then(function (text) {
+        var data = null;
+        if (text) { try { data = JSON.parse(text); } catch (e) { data = null; } }
+        if (!res.ok) {
+          var err = new Error((data && data.message) || ('请求失败 (' + res.status + ')'));
+          err.status = res.status;
+          throw err;
+        }
+        return data;
+      });
+    });
+  }
+
+  function levelName(value) {
+    for (var i = 0; i < state.levels.length; i++) {
+      if (state.levels[i].value === value) return state.levels[i].name;
+    }
+    return String(value);
+  }
+
+  // ---- 登录 / 登出 ----
+
+  function showLogin(msg) {
+    $('#app').hidden = true;
+    $('#login').hidden = false;
+    $('#login-msg').textContent = msg || '';
+    $('#login-pass').value = '';
+  }
+
+  function showApp() {
+    $('#login').hidden = true;
+    $('#app').hidden = false;
+    $('#me-name').textContent = state.meta.me.username;
+    $('#me-level').textContent = levelName(state.meta.me.level);
+  }
+
+  $('#login-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var btn = $('#login-btn');
+    btn.disabled = true;
+    $('#login-msg').textContent = '';
+
+    fetch('/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: $('#login-user').value, password: $('#login-pass').value })
+    }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (data) {
+        if (!res.ok) throw new Error((data && data.message) || '登录失败');
+        return data;
+      });
+    }).then(function (data) {
+      setToken(data.token);
+      return boot();
+    }).catch(function (err) {
+      $('#login-msg').textContent = err.message || '登录失败';
+    }).then(function () {
+      btn.disabled = false;
+    });
+  });
+
+  $('#logout').addEventListener('click', function () {
+    api('/auth/logout', { method: 'POST' }).catch(function () {}).then(function () {
+      clearToken();
+      showLogin('已退出登录');
+    });
+  });
+
+  // ---- 标签页 ----
+
+  Array.prototype.forEach.call(document.querySelectorAll('nav button'), function (btn) {
+    btn.addEventListener('click', function () {
+      Array.prototype.forEach.call(document.querySelectorAll('nav button'), function (b) {
+        b.classList.toggle('active', b === btn);
+      });
+      var tab = btn.getAttribute('data-tab');
+      ['tracks', 'users', 'playlists'].forEach(function (name) {
+        $('#tab-' + name).hidden = (name !== tab);
+      });
+    });
+  });
+
+  // ---- 歌曲 ----
+
+  function loadTracks(reset) {
+    if (reset) { state.tracks.offset = 0; state.tracks.items = []; }
+    var q = state.tracks.q;
+    var url = '/admin/api/tracks?offset=' + state.tracks.offset + '&limit=' + LEVEL +
+      (q ? '&query=' + encodeURIComponent(q) : '');
+
+    return api(url).then(function (data) {
+      state.tracks.items = state.tracks.items.concat(data.items);
+      state.tracks.total = data.total;
+      state.tracks.offset = state.tracks.items.length;
+      renderTracks();
+    });
+  }
+
+  function renderTracks() {
+    var t = state.tracks;
+    $('#track-count').textContent = t.items.length + ' / ' + t.total;
+    $('#track-more').hidden = t.items.length >= t.total;
+
+    if (!t.items.length) {
+      $('#track-body').innerHTML = '<div class="empty">没有歌曲</div>';
+      return;
+    }
+
+    var rows = t.items.map(function (s) {
+      return '<tr>' +
+        '<td>' + s.id + '</td>' +
+        '<td>' + esc(s.title) + '</td>' +
+        '<td>' + esc((s.artists || []).join('、')) + '</td>' +
+        '<td class="meta">' + esc(s.fileName) + '</td>' +
+        '<td>' + esc(s.uploader) + '</td>' +
+        '<td class="actions">' +
+          '<button data-edit-track="' + s.id + '">编辑</button>' +
+          '<button class="danger" data-del-track="' + s.id + '">删除</button>' +
+        '</td>' +
+      '</tr>';
+    }).join('');
+
+    $('#track-body').innerHTML =
+      '<table><thead><tr><th>ID</th><th>歌名</th><th>歌手</th><th>文件名</th><th>上传者</th><th></th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table>';
+
+    Array.prototype.forEach.call($('#track-body').querySelectorAll('[data-edit-track]'), function (b) {
+      b.addEventListener('click', function () { editTrack(Number(b.getAttribute('data-edit-track'))); });
+    });
+    Array.prototype.forEach.call($('#track-body').querySelectorAll('[data-del-track]'), function (b) {
+      b.addEventListener('click', function () { deleteTrack(Number(b.getAttribute('data-del-track'))); });
+    });
+  }
+
+  function findTrack(id) {
+    for (var i = 0; i < state.tracks.items.length; i++) {
+      if (state.tracks.items[i].id === id) return state.tracks.items[i];
+    }
+    return null;
+  }
+
+  function editTrack(id) {
+    var s = findTrack(id);
+    if (!s) return;
+
+    openModal('编辑歌曲 #' + id,
+      field('歌名', '<input id="f-title" value="' + esc(s.title) + '">') +
+      field('歌手（多个用中文顿号或逗号分隔）', '<input id="f-artists" value="' + esc((s.artists || []).join('、')) + '">') +
+      field('封面路径', '<input id="f-cover" value="' + esc(s.coverPath) + '">') +
+      field('歌词路径', '<input id="f-lyrics" value="' + esc(s.lyricsPath) + '">'),
+      function () {
+        var artists = $('#f-artists').value.split(/[、,，]/).map(function (x) { return x.trim(); })
+          .filter(function (x) { return x.length > 0; });
+        return {
+          title: $('#f-title').value.trim(),
+          artists: artists,
+          coverPath: $('#f-cover').value,
+          lyricsPath: $('#f-lyrics').value
+        };
+      },
+      function (body) {
+        return api('/admin/api/tracks/' + id, { method: 'PATCH', body: JSON.stringify(body) })
+          .then(function () { toast('已保存', 'ok'); return loadTracks(true); });
+      }
+    );
+  }
+
+  function deleteTrack(id) {
+    var s = findTrack(id);
+    if (!confirm('确定删除歌曲 #' + id + (s ? '「' + s.title + '」' : '') + '？音频文件也会被删除。')) return;
+    api('/admin/api/tracks/' + id, { method: 'DELETE' })
+      .then(function () { toast('已删除', 'ok'); return loadTracks(true); })
+      .catch(function (e) { if (e.message !== 'unauthorized') toast(e.message, 'err'); });
+  }
+
+  $('#track-search').addEventListener('click', function () {
+    state.tracks.q = $('#track-q').value.trim();
+    loadTracks(true).catch(handleErr);
+  });
+  $('#track-q').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') $('#track-search').click();
+  });
+  $('#track-more').addEventListener('click', function () { loadTracks(false).catch(handleErr); });
+
+  // ---- 用户 ----
+
+  function loadUsers() {
+    var q = state.users.q;
+    return api('/admin/api/users' + (q ? '?query=' + encodeURIComponent(q) : '')).then(function (data) {
+      state.users.items = data.items;
+      renderUsers();
+    });
+  }
+
+  function renderUsers() {
+    var u = state.users;
+    $('#user-count').textContent = u.items.length + ' 个用户';
+    $('#user-hint').textContent = '当前仅可把用户设置为「' + state.assignable.map(levelName).join(' / ') + '」。';
+
+    if (!u.items.length) {
+      $('#user-body').innerHTML = '<div class="empty">没有用户</div>';
+      return;
+    }
+
+    var rows = u.items.map(function (user) {
+      var options = state.assignable.map(function (v) {
+        var sel = (v === user.level) ? ' selected' : '';
+        return '<option value="' + v + '"' + sel + '>' + levelName(v) + '</option>';
+      }).join('');
+
+      // 不能修改自己的权限：自己的那一行只读
+      var isSelf = !!state.meta.me && user.id === state.meta.me.id;
+
+      // 目标用户当前等级不在可赋予集合内时（如 Admin/Owner），补充一个占位项并禁用保存
+      var locked = state.assignable.indexOf(user.level) === -1;
+      if (locked) {
+        options = '<option selected>' + levelName(user.level) + '</option>' + options;
+      }
+
+      return '<tr>' +
+        '<td>' + user.id + '</td>' +
+        '<td>' + esc(user.username) + (isSelf ? ' <span class="badge">自己</span>' : '') + '</td>' +
+        '<td><span class="badge">' + levelName(user.level) + '</span></td>' +
+        '<td><select data-level-for="' + user.id + '"' + (isSelf ? ' disabled title="不能修改自己的权限"' : '') + '>' +
+          options + '</select></td>' +
+        '<td class="actions"><button class="primary" data-save-user="' + user.id + '"' +
+          ((state.assignable.length && !isSelf) ? '' : ' disabled') + '>保存</button></td>' +
+      '</tr>';
+    }).join('');
+
+    $('#user-body').innerHTML =
+      '<table><thead><tr><th>ID</th><th>用户名</th><th>当前等级</th><th>设为</th><th></th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table>';
+
+    Array.prototype.forEach.call($('#user-body').querySelectorAll('[data-save-user]'), function (b) {
+      b.addEventListener('click', function () { saveUserLevel(Number(b.getAttribute('data-save-user'))); });
+    });
+  }
+
+  function saveUserLevel(id) {
+    var sel = $('#user-body').querySelector('[data-level-for="' + id + '"]');
+    if (!sel) return;
+    var level = Number(sel.value);
+    api('/admin/api/users/' + id + '/level', { method: 'PATCH', body: JSON.stringify({ level: level }) })
+      .then(function () { toast('已保存', 'ok'); return loadUsers(); })
+      .catch(function (e) { if (e.message !== 'unauthorized') toast(e.message, 'err'); });
+  }
+
+  $('#user-search').addEventListener('click', function () {
+    state.users.q = $('#user-q').value.trim();
+    loadUsers().catch(handleErr);
+  });
+  $('#user-q').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') $('#user-search').click();
+  });
+
+  // ---- 歌单 ----
+
+  function loadPlaylists() {
+    var q = state.playlists.q;
+    return api('/admin/api/playlists' + (q ? '?query=' + encodeURIComponent(q) : '')).then(function (data) {
+      state.playlists.items = data.items;
+      renderPlaylists();
+    });
+  }
+
+  function renderPlaylists() {
+    var p = state.playlists;
+    $('#playlist-count').textContent = p.items.length + ' 个歌单';
+
+    if (!p.items.length) {
+      $('#playlist-body').innerHTML = '<div class="empty">没有歌单</div>';
+      return;
+    }
+
+    var rows = p.items.map(function (pl) {
+      return '<tr>' +
+        '<td>' + pl.id + '</td>' +
+        '<td>' + esc(pl.name) + '</td>' +
+        '<td class="meta">' + esc(pl.description || '') + '</td>' +
+        '<td>' + pl.trackCount + '</td>' +
+        '<td class="actions">' +
+          '<button data-view-playlist="' + pl.id + '">曲目</button>' +
+          '<button data-edit-playlist="' + pl.id + '">编辑</button>' +
+          '<button class="danger" data-del-playlist="' + pl.id + '">删除</button>' +
+        '</td>' +
+      '</tr>';
+    }).join('');
+
+    $('#playlist-body').innerHTML =
+      '<table><thead><tr><th>ID</th><th>名称</th><th>简介</th><th>曲目数</th><th></th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table>';
+
+    Array.prototype.forEach.call($('#playlist-body').querySelectorAll('[data-view-playlist]'), function (b) {
+      b.addEventListener('click', function () { viewPlaylist(Number(b.getAttribute('data-view-playlist'))); });
+    });
+    Array.prototype.forEach.call($('#playlist-body').querySelectorAll('[data-edit-playlist]'), function (b) {
+      b.addEventListener('click', function () { editPlaylist(Number(b.getAttribute('data-edit-playlist'))); });
+    });
+    Array.prototype.forEach.call($('#playlist-body').querySelectorAll('[data-del-playlist]'), function (b) {
+      b.addEventListener('click', function () { deletePlaylist(Number(b.getAttribute('data-del-playlist'))); });
+    });
+  }
+
+  function findPlaylist(id) {
+    for (var i = 0; i < state.playlists.items.length; i++) {
+      if (state.playlists.items[i].id === id) return state.playlists.items[i];
+    }
+    return null;
+  }
+
+  function editPlaylist(id) {
+    var pl = findPlaylist(id);
+    if (!pl) return;
+
+    openModal('编辑歌单 #' + id,
+      field('名称', '<input id="p-name" value="' + esc(pl.name) + '">') +
+      field('简介', '<textarea id="p-desc" rows="3">' + esc(pl.description || '') + '</textarea>') +
+      field('封面路径', '<input id="p-cover" value="' + esc(pl.coverPath || '') + '">'),
+      function () {
+        return {
+          name: $('#p-name').value.trim(),
+          description: $('#p-desc').value,
+          coverPath: $('#p-cover').value
+        };
+      },
+      function (body) {
+        return api('/admin/api/playlists/' + id, { method: 'PATCH', body: JSON.stringify(body) })
+          .then(function () { toast('已保存', 'ok'); return loadPlaylists(); });
+      }
+    );
+  }
+
+  function deletePlaylist(id) {
+    var pl = findPlaylist(id);
+    if (!confirm('确定删除歌单 #' + id + (pl ? '「' + pl.name + '」' : '') + '？')) return;
+    api('/admin/api/playlists/' + id, { method: 'DELETE' })
+      .then(function () { toast('已删除', 'ok'); return loadPlaylists(); })
+      .catch(function (e) { if (e.message !== 'unauthorized') toast(e.message, 'err'); });
+  }
+
+  function viewPlaylist(id) {
+    api('/admin/api/playlists/' + id).then(function (detail) {
+      var rows = (detail.tracks || []).map(function (s) {
+        return '<div class="row">' +
+          '<span>' + esc(s.title) + '</span>' +
+          '<span class="meta">' + esc((s.artists || []).join('、')) + '</span>' +
+          '<span class="meta right">#' + s.id + '</span>' +
+          '<button class="danger" data-rm-track="' + s.id + '">移除</button>' +
+        '</div>';
+      }).join('') || '<div class="empty">该歌单暂无曲目</div>';
+
+      openModal('歌单 #' + id + '「' + detail.name + '」的曲目',
+        '<div class="track-list">' + rows + '</div>',
+        null,
+        null,
+        '关闭'
+      );
+
+      Array.prototype.forEach.call($('#modal-body').querySelectorAll('[data-rm-track]'), function (b) {
+        b.addEventListener('click', function () {
+          var trackId = Number(b.getAttribute('data-rm-track'));
+          api('/admin/api/playlists/' + id + '/tracks/' + trackId, { method: 'DELETE' })
+            .then(function () { toast('已移除', 'ok'); closeModal(); return loadPlaylists(); })
+            .catch(function (e) { if (e.message !== 'unauthorized') toast(e.message, 'err'); });
+        });
+      });
+    }).catch(handleErr);
+  }
+
+  $('#playlist-search').addEventListener('click', function () {
+    state.playlists.q = $('#playlist-q').value.trim();
+    loadPlaylists().catch(handleErr);
+  });
+  $('#playlist-q').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') $('#playlist-search').click();
+  });
+
+  // ---- 弹窗 ----
+
+  function field(label, control) {
+    return '<label>' + esc(label) + '</label>' + control;
+  }
+
+  function openModal(title, bodyHtml, collect, save, closeLabel) {
+    var overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.innerHTML =
+      '<div class="card">' +
+        '<h2>' + esc(title) + '</h2>' +
+        '<div id="modal-body">' + bodyHtml + '</div>' +
+        '<div class="modal-actions">' +
+          '<button data-close>' + esc(closeLabel || '取消') + '</button>' +
+          (save ? '<button class="primary" data-save>保存</button>' : '') +
+        '</div>' +
+      '</div>';
+
+    document.body.appendChild(overlay);
+
+    overlay.querySelector('[data-close]').addEventListener('click', closeModal);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(); });
+
+    var saveBtn = overlay.querySelector('[data-save]');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', function () {
+        saveBtn.disabled = true;
+        Promise.resolve()
+          .then(function () { return save(collect()); })
+          .then(function () { closeModal(); })
+          .catch(function (e) { if (e.message !== 'unauthorized') toast(e.message, 'err'); })
+          .then(function () { saveBtn.disabled = false; });
+      });
+    }
+  }
+
+  function closeModal() {
+    var el = document.querySelector('.overlay');
+    if (el) el.remove();
+  }
+
+  function handleErr(e) {
+    if (e && e.message !== 'unauthorized') toast(e.message, 'err');
+  }
+
+  // ---- 启动 ----
+
+  function boot() {
+    return api('/admin/api/meta').then(function (m) {
+      state.meta = m;
+      state.levels = m.allLevels;
+      state.assignable = m.assignableLevels.slice().sort(function (a, b) { return b - a; });
+      showApp();
+      return loadTracks(true);
+    }).then(function () {
+      loadUsers().catch(handleErr);
+      loadPlaylists().catch(handleErr);
+    }).catch(function (e) {
+      if (e && e.status === 403) {
+        // 账号等级低于后台门槛（提高 minLevel 后会出现）
+        clearToken();
+        showLogin('权限不足，无法访问后台');
+      } else if (e && e.message !== 'unauthorized') {
+        toast(e.message, 'err');
+      }
+    });
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>

@@ -1,29 +1,31 @@
 package top.stellortus
 
-import top.stellortus.stellar_music_server.database.auth.UserLevel
-import kotlin.test.*
+import top.stellortus.stellar_music_common.dto.UserLevel
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class UserLevelTest {
 
     @Test
     fun `test level values`() {
-        assertEquals(UserLevel.USER, UserLevel.fromValue(0))
+        assertEquals(UserLevel.User, UserLevel.fromValue(0))
         assertEquals(UserLevel.VIP, UserLevel.fromValue(1))
-        assertEquals(UserLevel.ADMIN, UserLevel.fromValue(5))
-        assertEquals(UserLevel.OWNER, UserLevel.fromValue(9))
+        assertEquals(UserLevel.Admin, UserLevel.fromValue(5))
+        assertEquals(UserLevel.Owner, UserLevel.fromValue(9))
     }
 
     @Test
     fun `test unknown level falls back to user`() {
-        assertEquals(UserLevel.USER, UserLevel.fromValue(999))
-        assertEquals(UserLevel.USER, UserLevel.fromValue(-1))
+        assertEquals(UserLevel.User, UserLevel.fromValue(999))
+        assertEquals(UserLevel.User, UserLevel.fromValue(-1))
     }
 
     @Test
     fun `test level is cumulative`() {
-        assertTrue(UserLevel.OWNER.value >= UserLevel.ADMIN.value)
-        assertTrue(UserLevel.ADMIN.value >= UserLevel.VIP.value)
-        assertTrue(UserLevel.VIP.value >= UserLevel.USER.value)
+        assertTrue(UserLevel.Owner.value >= UserLevel.Admin.value)
+        assertTrue(UserLevel.Admin.value >= UserLevel.VIP.value)
+        assertTrue(UserLevel.VIP.value >= UserLevel.User.value)
     }
 
 }

@@ -1,10 +1,12 @@
 package top.stellortus.stellar_music_server.database.auth
 
-import top.stellortus.stellar_music_server.auth.TokenGenerator
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
 import org.jetbrains.exposed.sql.transactions.transaction
+import top.stellortus.stellar_music_common.dto.User
+import top.stellortus.stellar_music_common.dto.UserLevel
+import top.stellortus.stellar_music_server.auth.TokenGenerator
 import java.io.File
 
 class AuthRepository {
@@ -39,6 +41,25 @@ class AuthRepository {
             ?.let { it.toUser() to it[UsersTable.passwordHash] }
     }
 
+    fun listUsers(keyword: String?): List<User> = transaction(database) {
+        val query = keyword?.trim().orEmpty()
+        val base = if (query.isEmpty()) {
+            UsersTable.selectAll()
+        } else {
+            UsersTable.selectAll().where { UsersTable.username like "%$query%" }
+        }
+
+        base.orderBy(UsersTable.id to SortOrder.ASC).map { it.toUser() }
+    }
+
+    fun findById(id: Int): User? = transaction(database) {
+        UsersTable.selectAll()
+            .where { UsersTable.id eq id }
+            .limit(1)
+            .firstOrNull()
+            ?.toUser()
+    }
+
     fun createUser(username: String, passwordHash: String): User = transaction(database) {
         val newId = UsersTable.insert {
             it[UsersTable.username] = username
@@ -46,7 +67,7 @@ class AuthRepository {
             it[createdAt] = System.currentTimeMillis()
         } get UsersTable.id
 
-        User(id = newId, username = username, level = UserLevel.USER)
+        User(id = newId, username = username, level = UserLevel.User)
     }
 
     fun setLevel(userId: Int, level: UserLevel): Int = transaction(database) {
@@ -113,7 +134,6 @@ class AuthRepository {
     )
 
     companion object {
-        /** 空闲超时：距上次使用超过 60 天的 session 视为失效并被清除 */
         const val SESSION_IDLE_TIMEOUT_MS = 60L * 24 * 60 * 60 * 1000
     }
 }

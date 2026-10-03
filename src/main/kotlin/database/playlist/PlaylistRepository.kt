@@ -6,8 +6,12 @@ import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
-import top.stellortus.stellar_music_server.database.track.Track
+import top.stellortus.stellar_music_common.dto.Playlist
+import top.stellortus.stellar_music_common.dto.PlaylistSummary
+import top.stellortus.stellar_music_common.dto.Track
 import top.stellortus.stellar_music_server.database.track.TrackTable
+import top.stellortus.stellar_music_server.exceptions.ResourceNotExistException
+import top.stellortus.stellar_music_server.util.extensions.ifFalse
 
 class PlaylistRepository(
     private val database: Database,
@@ -49,13 +53,13 @@ class PlaylistRepository(
             }
     }
 
-    fun get(id: Int): Playlist? = transaction(database) {
+    fun get(id: Int): Playlist = transaction(database) {
         PlaylistsTable.selectAll()
             .where { PlaylistsTable.id eq id }
             .limit(1)
             .firstOrNull()
             ?.toPlaylist()
-    }
+    } ?: throw ResourceNotExistException("id为 $id 的歌单")
 
     fun tracksOf(playlistId: Int): List<Track> = transaction(database) {
         PlaylistTracksTable
@@ -73,7 +77,7 @@ class PlaylistRepository(
             .toInt()
     }
 
-    fun update(id: Int, name: String?, description: String?, coverPath: String?): Boolean =
+    fun update(id: Int, name: String?, description: String?, coverPath: String?) =
         transaction(database) {
             PlaylistsTable.update({ PlaylistsTable.id eq id }) {
                 name?.let { value -> it[PlaylistsTable.name] = value }
@@ -81,16 +85,16 @@ class PlaylistRepository(
                 coverPath?.let { value -> it[PlaylistsTable.coverPath] = value }
                 it[updatedAt] = System.currentTimeMillis()
             } > 0
-        }
+        }.ifFalse { throw ResourceNotExistException("id为 $id 的歌单") }
 
-    fun delete(id: Int): Boolean = transaction(database) {
+    fun delete(id: Int) = transaction(database) {
         PlaylistTracksTable.deleteWhere { PlaylistTracksTable.playlistId eq id }
         PlaylistsTable.deleteWhere { PlaylistsTable.id eq id } > 0
-    }
+    }.ifFalse { throw ResourceNotExistException("id为 $id 的歌单") }
 
-    fun addTracks(playlistId: Int, trackIds: List<Int>): AddTracksResult {
+    fun addTracks(playlistId: Int, trackIds: List<Int>) {
         val unique = trackIds.distinct()
-        if (unique.isEmpty()) return AddTracksResult(0, emptyList())
+        if (unique.isEmpty()) return
 
         return transaction(database) {
             val now = System.currentTimeMillis()
@@ -129,8 +133,6 @@ class PlaylistRepository(
                     it[updatedAt] = now
                 }
             }
-
-            AddTracksResult(added, ignored)
         }
     }
 

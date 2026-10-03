@@ -1,6 +1,7 @@
 package top.stellortus.stellar_music_server.database.auth
 
 import org.jetbrains.exposed.sql.Table
+import top.stellortus.stellar_music_common.dto.UserLevel
 
 object UsersTable : Table("users") {
     val id = integer("id").autoIncrement()
@@ -11,7 +12,7 @@ object UsersTable : Table("users") {
 
     val createdAt = long("created_at")
 
-    val level = integer("level").default(UserLevel.USER.value)
+    val level = integer("level").default(UserLevel.User.value)
 
     override val primaryKey = PrimaryKey(id)
 }

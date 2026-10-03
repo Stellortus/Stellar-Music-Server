@@ -3,15 +3,15 @@ package top.stellortus.stellar_music_server.routes
 import io.ktor.http.ContentDisposition
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.application.log
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondFile
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
-import top.stellortus.stellar_music_server.auth.MessageResponse
+import top.stellortus.stellar_music_common.dto.MessageResponse
 import top.stellortus.stellar_music_server.config.AppPaths.mediaDir
 import top.stellortus.stellar_music_server.util.PathSafety
+import top.stellortus.stellar_music_server.util.extensions.info
 import java.io.File
 import kotlin.text.startsWith
 
@@ -37,9 +37,7 @@ fun Route.downloadApkRoutes() {
                 MessageResponse("版本号非法")
             )
 
-        call.application.log.info(
-            "APK 下载: version=$version 文件=${apkFile.absolutePath} 存在=${apkFile.isFile}"
-        )
+        call.info("APK 下载: version=$version 文件=${apkFile.absolutePath} 存在=${apkFile.isFile}")
 
         if (!apkFile.exists()) return@get call.respond(HttpStatusCode.NotFound)
 

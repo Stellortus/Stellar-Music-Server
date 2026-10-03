@@ -5,8 +5,11 @@ import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.like
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
+import top.stellortus.stellar_music_common.dto.Track
+import top.stellortus.stellar_music_server.exceptions.ResourceNotExistException
 import java.io.File
 
 class TrackRepository(private val json: Json = Json) {
@@ -56,18 +59,74 @@ class TrackRepository(private val json: Json = Json) {
             .map { it.toTrack() }
     }
 
+    fun search(keyword: String?, offset: Int, limit: Int): List<Track> = transaction(database) {
+        val query = keyword?.trim().orEmpty()
+        val base = if (query.isEmpty()) {
+            TrackTable.selectAll()
+        } else {
+            TrackTable.selectAll().where { trackPredicate(query) }
+        }
+
+        base.orderBy(TrackTable.id to SortOrder.DESC)
+            .limit(limit, offset = offset.toLong())
+            .map { it.toTrack() }
+    }
+
+    fun count(keyword: String?): Int = transaction(database) {
+        val query = keyword?.trim().orEmpty()
+        val base = if (query.isEmpty()) {
+            TrackTable.selectAll()
+        } else {
+            TrackTable.selectAll().where { trackPredicate(query) }
+        }
+
+        base.count().toInt()
+    }
+
+    fun update(
+        id: Int,
+        title: String?,
+        artists: List<String>?,
+        coverPath: String?,
+        lyricsPath: String?,
+    ): Boolean = transaction(database) {
+        val exists = TrackTable.selectAll()
+            .where { TrackTable.id eq id }
+            .limit(1)
+            .firstOrNull() != null
+        if (!exists) return@transaction false
+
+        TrackTable.update({ TrackTable.id eq id }) {
+            title?.let { value -> it[TrackTable.title] = value }
+            artists?.let { value ->
+                it[TrackTable.artists] = json.encodeToString(ListSerializer(String.serializer()), value)
+            }
+            coverPath?.let { value -> it[TrackTable.coverPath] = value }
+            lyricsPath?.let { value -> it[TrackTable.lyricsPath] = value }
+        }
+        true
+    }
+
+    private fun trackPredicate(keyword: String): Op<Boolean> {
+        val needle = "%$keyword%"
+        return (TrackTable.title like needle) or
+                (TrackTable.artists like needle) or
+                (TrackTable.fileName like needle) or
+                (TrackTable.uploader like needle)
+    }
+
     fun existsByFileName(fileName: String): Boolean = transaction(database) {
         TrackTable.selectAll().where { TrackTable.fileName eq fileName }
             .limit(1)
             .firstOrNull() != null
     }
 
-    fun get(id: Int): Track? = transaction(database) {
+    fun get(id: Int): Track = transaction(database) {
         TrackTable.selectAll().where { TrackTable.id eq id }
             .limit(1)
             .firstOrNull()
             ?.toTrack()
-    }
+    } ?: throw ResourceNotExistException("id为 $id 的歌曲")
 
     fun delete(id: Int): Boolean = transaction(database) {
         TrackTable.deleteWhere { TrackTable.id eq id } > 0

@@ -1,30 +1,36 @@
 package top.stellortus.stellar_music_server
 
-import top.stellortus.stellar_music_server.auth.Argon2PasswordHasher
-import top.stellortus.stellar_music_server.routes.authRoutes
-import top.stellortus.stellar_music_server.database.auth.AuthRepository
-import top.stellortus.stellar_music_server.database.playlist.PlaylistRepository
-import top.stellortus.stellar_music_server.database.track.TrackRepository
-import top.stellortus.stellar_music_server.database.track.TrackSort
-import io.ktor.serialization.kotlinx.json.json
+import io.ktor.http.*
+import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.plugins.partialcontent.*
+import io.ktor.server.plugins.statuspages.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.json.Json
+import top.stellortus.stellar_music_common.dto.MessageResponse
+import top.stellortus.stellar_music_server.auth.Argon2PasswordHasher
 import top.stellortus.stellar_music_server.config.AppPaths.mediaDir
 import top.stellortus.stellar_music_server.config.AppPaths.trackDataBasePath
 import top.stellortus.stellar_music_server.config.AppPaths.userDatabasePath
-import top.stellortus.stellar_music_server.routes.downloadApkRoutes
-import top.stellortus.stellar_music_server.routes.playlistRoutes
-import top.stellortus.stellar_music_server.routes.trackRoutes
+import top.stellortus.stellar_music_server.database.auth.AuthRepository
+import top.stellortus.stellar_music_server.database.playlist.PlaylistRepository
+import top.stellortus.stellar_music_server.database.track.TrackRepository
+import top.stellortus.stellar_music_server.database.track.TrackSort
+import top.stellortus.stellar_music_server.exceptions.IllegalParamsException
+import top.stellortus.stellar_music_server.exceptions.PermissionDeniedException
+import top.stellortus.stellar_music_server.exceptions.ResourceNotExistException
+import top.stellortus.stellar_music_server.exceptions.UploadingException
+import top.stellortus.stellar_music_server.routes.*
+import top.stellortus.stellar_music_server.util.extensions.RouteDependencies
+import top.stellortus.stellar_music_server.util.extensions.error
+import top.stellortus.stellar_music_server.util.extensions.installRouteDependencies
 import java.io.File
 import kotlin.enums.enumEntries
 
 fun Application.configureRouting() {
-
     val trackRepo = TrackRepository()
     trackRepo.init(trackDataBasePath)
 
@@ -49,6 +55,28 @@ fun Application.configureRouting() {
             ignoreUnknownKeys = true
         })
     }
+    install(StatusPages) {
+        exception<PermissionDeniedException> { call, exception ->
+            call.respond(HttpStatusCode.Unauthorized, MessageResponse(exception.message ?: ""))
+        }
+        exception<IllegalStateException> { call, exception ->
+            call.error("未处理的非法状态，返回 500", exception)
+            call.respond(HttpStatusCode.InternalServerError, MessageResponse("服务器内部错误"))
+        }
+        exception<IllegalParamsException> { call, exception ->
+            call.error(exception.message)
+            call.respond(HttpStatusCode.BadRequest, MessageResponse(exception.message ?: ""))
+        }
+        exception<ResourceNotExistException> { call, exception ->
+            call.error(exception.message)
+            call.respond(HttpStatusCode.NotFound, MessageResponse(exception.message ?: ""))
+        }
+        exception<UploadingException> { call, exception ->
+            call.error(exception.message)
+            call.respond(HttpStatusCode.BadRequest, MessageResponse(exception.message ?: ""))
+        }
+    }
+
 
     intercept(ApplicationCallPipeline.Monitoring) {
         val startedAt = System.currentTimeMillis()
@@ -63,10 +91,20 @@ fun Application.configureRouting() {
         }
     }
     routing {
+        installRouteDependencies(
+            RouteDependencies(
+                tracksDir,
+                trackRepo,
+                playlistRepo,
+                authRepo,
+                passwordHasher
+            )
+        )
         downloadApkRoutes()
-        authRoutes(authRepo, passwordHasher)
-        trackRoutes(trackRepo, tracksDir, authRepo)
-        playlistRoutes(playlistRepo, authRepo)
+        authRoutes()
+        trackRoutes()
+        playlistRoutes()
+        adminRoutes()
         get("/track_list") {
             val sortParam = call.request.queryParameters["sort"]
             val start = call.request.queryParameters["start"]?.toIntOrNull() ?: 0
