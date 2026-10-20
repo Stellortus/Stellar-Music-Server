@@ -1,4 +1,4 @@
-package top.stellortus.stellar_music_server.database.playlist
+package top.stellortus.stellar_music_server.db.table
 
 import org.jetbrains.exposed.sql.Table
 
@@ -8,6 +8,7 @@ object PlaylistsTable : Table("playlists") {
     val name        = text("name")
     val description = text("description").nullable()
     val coverPath   = text("cover_path").nullable()
+    val public    = bool("public").default(false)
     val createdAt   = long("created_at")
     val updatedAt   = long("updated_at")
 

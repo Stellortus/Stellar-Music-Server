@@ -1,4 +1,4 @@
-package top.stellortus.stellar_music_server.database.playlist
+package top.stellortus.stellar_music_server.db.manager
 
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
@@ -9,20 +9,16 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import top.stellortus.stellar_music_common.dto.Playlist
 import top.stellortus.stellar_music_common.dto.PlaylistSummary
 import top.stellortus.stellar_music_common.dto.Track
-import top.stellortus.stellar_music_server.database.track.TrackTable
+import top.stellortus.stellar_music_common.dto.User
+import top.stellortus.stellar_music_server.db.table.PlaylistTracksTable
+import top.stellortus.stellar_music_server.db.table.PlaylistsTable
+import top.stellortus.stellar_music_server.db.table.TrackTable
 import top.stellortus.stellar_music_server.exceptions.ResourceNotExistException
 import top.stellortus.stellar_music_server.util.extensions.ifFalse
 
-class PlaylistRepository(
-    private val database: Database,
-    private val json: Json = Json,
-) {
+object PlaylistManager : DatabaseManager("tracks.db", PlaylistsTable, PlaylistTracksTable) {
 
-    fun init() {
-        transaction(database) {
-            SchemaUtils.create(PlaylistsTable, PlaylistTracksTable)
-        }
-    }
+    private val json: Json = Json
 
     fun create(ownerId: Int, requestedName: String?): Playlist = transaction(database) {
         val now = System.currentTimeMillis()
@@ -47,6 +43,38 @@ class PlaylistRepository(
 
         PlaylistsTable.selectAll()
             .orderBy(PlaylistsTable.updatedAt to SortOrder.DESC)
+            .map { row ->
+                val playlist = row.toPlaylist()
+                PlaylistSummary(playlist, (counts[playlist.id] ?: 0L).toInt())
+            }
+    }
+
+
+    /**
+     * `searchKey` may contain spaces
+     * The search result **must** ignore spaces or the difference between upper/lowercase letters
+     * e.g. for `searchKey="hello world"`, the following names match the `searchKey`:
+     *  - HelloWorld
+     *  - HeLlO WorLD
+     *  - hellOWorLd
+     */
+    fun search(searchKey: String): List<PlaylistSummary> {
+        val keyword = searchKey.filterNot { it.isWhitespace() }
+        return listAll().filter {
+            it.playlist.name.filterNot { char -> char.isWhitespace() }
+                .contains(keyword, ignoreCase = true)
+        }
+    }
+
+    fun myPlaylist(user: User): List<PlaylistSummary> = transaction(database) {
+        val counts = PlaylistTracksTable
+            .select(PlaylistTracksTable.playlistId, PlaylistTracksTable.id.count())
+            .groupBy(PlaylistTracksTable.playlistId)
+            .associate { it[PlaylistTracksTable.playlistId] to it[PlaylistTracksTable.id.count()] }
+
+        PlaylistsTable.selectAll()
+            .orderBy(PlaylistsTable.updatedAt to SortOrder.DESC)
+            .where { PlaylistsTable.ownerId eq user.id }
             .map { row ->
                 val playlist = row.toPlaylist()
                 PlaylistSummary(playlist, (counts[playlist.id] ?: 0L).toInt())

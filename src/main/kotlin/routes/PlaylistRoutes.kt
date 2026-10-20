@@ -5,6 +5,7 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import top.stellortus.stellar_music_common.dto.*
+import top.stellortus.stellar_music_server.db.manager.PlaylistManager
 import top.stellortus.stellar_music_server.util.extensions.*
 
 private const val PLAYLIST_NOT_FOUND_MESSAGE = "歌单不存在"
@@ -28,14 +29,14 @@ fun Route.playlistRoutes() {
                 }
             }
 
-            val playlist = playlistRepo.create(user.id, request.name)
+            val playlist = PlaylistManager.create(user.id, request.name)
             call.info("歌单创建: id=${playlist.id} name=${playlist.name} owner=${user.username}")
             call.respond(playlist.toResponse(trackCount = 0))
         }
 
         get {
-            requireUser()
-            val playlists = playlistRepo.listAll()
+            val user = requireUser()
+            val playlists = PlaylistManager.myPlaylist(user)
             call.info("歌单列表: 返回=${playlists.size} 个")
             call.respond(playlists.map { it.toResponse() })
         }
@@ -44,10 +45,9 @@ fun Route.playlistRoutes() {
 
             get {
                 requireUser()
-
                 val id = call.id
-                val playlist = playlistRepo.get(id)
-                val tracks = playlistRepo.tracksOf(id)
+                val playlist = PlaylistManager.get(id)
+                val tracks = PlaylistManager.tracksOf(id)
                 call.info("歌单详情: id=$id name=${playlist.name} 曲目=${tracks.size} 首")
                 call.respond(playlist.toDetailResponse(tracks))
             }
@@ -55,7 +55,7 @@ fun Route.playlistRoutes() {
             delete {
                 requireUser()
                 val id = call.id
-                playlistRepo.delete(id)
+                PlaylistManager.delete(id)
                 call.info("删除歌单: id=$id")
                 call.ok()
             }
@@ -73,7 +73,7 @@ fun Route.playlistRoutes() {
                     )
                 }
 
-                val updated = playlistRepo.update(id, request.name, request.description, request.coverPath)
+                val updated = PlaylistManager.update(id, request.name, request.description, request.coverPath)
                 if (!updated) {
                     call.warn("歌单更新失败: id=$id 不存在")
                     return@put call.respond(
@@ -82,7 +82,7 @@ fun Route.playlistRoutes() {
                     )
                 }
 
-                val playlist = playlistRepo.get(id)
+                val playlist = PlaylistManager.get(id)
                 call.info(
                     "歌单更新: id=$id name=${playlist.name} " +
                             "改name=${request.name != null} 改description=${request.description != null} " +
@@ -90,12 +90,13 @@ fun Route.playlistRoutes() {
                 )
                 call.ok()
             }
+
             route("/tracks") {
                 post {
                     requireUser()
                     val id = call.id
                     val request = call.tryReceive<AddTracksRequest>()
-                    playlistRepo.addTracks(id, request.trackIds)
+                    PlaylistManager.addTracks(id, request.trackIds)
                     call.info(
                         "歌单加歌: id=$id 请求=${request.trackIds.size} 个 "
                     )
@@ -105,13 +106,21 @@ fun Route.playlistRoutes() {
                     requireUser()
                     val id = call.id
                     val trackId = call.trackId
-                    playlistRepo.removeTrack(id, trackId)
+                    PlaylistManager.removeTrack(id, trackId)
                     call.info(
                         "歌单移除: id=$id trackId=$trackId"
                     )
                     call.ok()
                 }
             }
+        }
+
+        get("/search") {
+            requireUser()
+            val searchKey = call.request.queryParameters["key"].orEmpty()
+            val playlists = PlaylistManager.search(searchKey)
+            call.info("歌单搜索: key=$searchKey 返回=${playlists.size} 个")
+            call.respond(playlists.map { it.toResponse() })
         }
     }
 }

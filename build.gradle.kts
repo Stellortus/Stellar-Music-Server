@@ -3,11 +3,11 @@ import java.util.*
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(ktorLibs.plugins.ktor)
-    kotlin("plugin.serialization") version "2.4.20"
+    alias(libs.plugins.serialization)
 }
 
 group = "top.stellortus.stellar_music_server"
-version = "0.5"
+version = "0.6"
 
 application {
     mainClass = "io.ktor.server.netty.EngineMain"
@@ -62,7 +62,7 @@ dependencies {
     implementation("org.jetbrains.exposed:exposed-core:0.50.1")
     implementation("org.jetbrains.exposed:exposed-jdbc:0.50.1")
     implementation("org.xerial:sqlite-jdbc:3.45.1.0")
-    implementation("org.bouncycastle:bcprov-jdk18on:1.85")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.86")
     implementation("org.slf4j:slf4j-simple:2.0.12")
 
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")

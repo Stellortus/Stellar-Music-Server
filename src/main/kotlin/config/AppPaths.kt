@@ -10,10 +10,7 @@ object AppPaths {
     val mediaDir: String
         get() = if (isWindows) "src/main/resources" else "/srv/Stellar-Music-Server"
 
-    val trackDataBasePath: String
-        get() = "$serverDataDir/db/tracks.db"
-
-    val userDatabasePath: String
-        get() = "$serverDataDir/db/users.db"
+    val databaseDir: String
+        get() = "$serverDataDir/db"
 
 }

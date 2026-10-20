@@ -1,4 +1,4 @@
-package top.stellortus.stellar_music_server.database.auth
+package top.stellortus.stellar_music_server.db.manager
 
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -7,23 +7,10 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import top.stellortus.stellar_music_common.dto.User
 import top.stellortus.stellar_music_common.dto.UserLevel
 import top.stellortus.stellar_music_server.auth.TokenGenerator
-import java.io.File
+import top.stellortus.stellar_music_server.db.table.SessionsTable
+import top.stellortus.stellar_music_server.db.table.UsersTable
 
-class AuthRepository {
-
-    lateinit var database: Database
-        private set
-
-    fun init(dbPath: String) {
-        File(dbPath).parentFile?.mkdirs()
-        database = Database.connect(
-            url = "jdbc:sqlite:$dbPath",
-            driver = "org.sqlite.JDBC",
-        )
-        transaction(database) {
-            SchemaUtils.create(UsersTable, SessionsTable)
-        }
-    }
+object AuthManager : DatabaseManager("users.db", UsersTable, SessionsTable) {
 
     fun findByUsername(username: String): User? = transaction(database) {
         UsersTable.selectAll()
@@ -133,7 +120,5 @@ class AuthRepository {
         level = UserLevel.fromValue(this[UsersTable.level]),
     )
 
-    companion object {
-        const val SESSION_IDLE_TIMEOUT_MS = 60L * 24 * 60 * 60 * 1000
-    }
+    const val SESSION_IDLE_TIMEOUT_MS = 60L * 24 * 60 * 60 * 1000
 }
