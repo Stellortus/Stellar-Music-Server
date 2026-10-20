@@ -10,6 +10,7 @@ import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import top.stellortus.stellar_music_common.dto.MessageResponse
 import top.stellortus.stellar_music_common.dto.Track
+import top.stellortus.stellar_music_server.db.manager.TrackManager
 import top.stellortus.stellar_music_server.exceptions.UploadingException
 import top.stellortus.stellar_music_server.util.PathSafety
 import top.stellortus.stellar_music_server.util.extensions.*
@@ -46,7 +47,7 @@ fun Route.trackRoutes() {
         get {
             val id = call.id
 
-            val song = trackRepo.get(id)
+            val song = TrackManager.get(id)
 
             call.info("请求音频: id=$id fileName=${song.fileName}")
 
@@ -116,7 +117,7 @@ fun Route.trackRoutes() {
 
                             call.info("落盘路径=${file.absolutePath}")
 
-                            trackRepo.existsByFileName(file.name)
+                            TrackManager.existsByFileName(file.name)
                                 .ifTrue { throw UploadingException("同名文件已存在: ${file.name}") }
 
                             try {
@@ -150,10 +151,11 @@ fun Route.trackRoutes() {
                             }
 
                             try {
-                                val saved = trackRepo.upload(
+                                val tag = audioFile.tag
+                                val saved = TrackManager.upload(
                                     Track(
-                                        title = file.name,
-                                        artists = audioFile.tag?.getAll(FieldKey.ARTIST)
+                                        title = tag?.getFirst(FieldKey.TITLE)?.takeIf { it.isNotEmpty()} ?: file.name,
+                                        artists = tag?.getAll(FieldKey.ARTIST)
                                             ?.takeIf { it.isNotEmpty() } ?: listOf("未知歌手"),
                                         fileName = file.name,
                                         uploader = user.username,

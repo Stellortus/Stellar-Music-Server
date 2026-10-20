@@ -13,12 +13,9 @@ import kotlinx.serialization.json.Json
 import top.stellortus.stellar_music_common.dto.MessageResponse
 import top.stellortus.stellar_music_server.auth.Argon2PasswordHasher
 import top.stellortus.stellar_music_server.config.AppPaths.mediaDir
-import top.stellortus.stellar_music_server.config.AppPaths.trackDataBasePath
-import top.stellortus.stellar_music_server.config.AppPaths.userDatabasePath
-import top.stellortus.stellar_music_server.database.auth.AuthRepository
-import top.stellortus.stellar_music_server.database.playlist.PlaylistRepository
-import top.stellortus.stellar_music_server.database.track.TrackRepository
-import top.stellortus.stellar_music_server.database.track.TrackSort
+import top.stellortus.stellar_music_server.db.TrackSort
+import top.stellortus.stellar_music_server.db.manager.DatabaseManager
+import top.stellortus.stellar_music_server.db.manager.TrackManager
 import top.stellortus.stellar_music_server.exceptions.IllegalParamsException
 import top.stellortus.stellar_music_server.exceptions.PermissionDeniedException
 import top.stellortus.stellar_music_server.exceptions.ResourceNotExistException
@@ -31,14 +28,7 @@ import java.io.File
 import kotlin.enums.enumEntries
 
 fun Application.configureRouting() {
-    val trackRepo = TrackRepository()
-    trackRepo.init(trackDataBasePath)
-
-    val authRepo = AuthRepository()
-    authRepo.init(userDatabasePath)
-
-    val playlistRepo = PlaylistRepository(trackRepo.database)
-    playlistRepo.init()
+    DatabaseManager.initDb()
 
     val passwordHasher = Argon2PasswordHasher()
 
@@ -57,7 +47,7 @@ fun Application.configureRouting() {
     }
     install(StatusPages) {
         exception<PermissionDeniedException> { call, exception ->
-            call.respond(HttpStatusCode.Unauthorized, MessageResponse(exception.message ?: ""))
+            call.respond(HttpStatusCode.Forbidden, MessageResponse(exception.message ?: ""))
         }
         exception<IllegalStateException> { call, exception ->
             call.error("未处理的非法状态，返回 500", exception)
@@ -92,13 +82,7 @@ fun Application.configureRouting() {
     }
     routing {
         installRouteDependencies(
-            RouteDependencies(
-                tracksDir,
-                trackRepo,
-                playlistRepo,
-                authRepo,
-                passwordHasher
-            )
+            RouteDependencies(tracksDir, passwordHasher)
         )
         downloadApkRoutes()
         authRoutes()
@@ -109,7 +93,7 @@ fun Application.configureRouting() {
             val sortParam = call.request.queryParameters["sort"]
             val start = call.request.queryParameters["start"]?.toIntOrNull() ?: 0
             val sort = enumEntries<TrackSort>().firstOrNull { it.name == sortParam }
-            val songList = trackRepo.top(10, sort, start = start)
+            val songList = TrackManager.top(10, sort, start = start)
             call.application.log.info("曲目列表: sort=$sortParam 返回=${songList.size} 首")
             call.respond(songList)
         }

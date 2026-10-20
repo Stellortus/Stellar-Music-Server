@@ -6,7 +6,7 @@ import io.ktor.server.routing.*
 import top.stellortus.stellar_music_common.dto.User
 import top.stellortus.stellar_music_common.dto.UserLevel
 import top.stellortus.stellar_music_server.auth.AuthContext
-import top.stellortus.stellar_music_server.database.auth.AuthRepository
+import top.stellortus.stellar_music_server.db.manager.AuthManager
 import top.stellortus.stellar_music_server.exceptions.AuthorizationException
 import top.stellortus.stellar_music_server.exceptions.PermissionDeniedException
 import top.stellortus.stellar_music_server.exceptions.UnauthorizedException
@@ -19,21 +19,16 @@ fun ApplicationCall.bearerToken(): String? {
     return token.ifEmpty { null }
 }
 
-private fun ApplicationCall.require(
-    repo: AuthRepository,
-    minLevel: UserLevel,
-) = bearerToken()?.let { token -> repo.findByToken(token) }
+private fun ApplicationCall.require(minLevel: UserLevel) =
+    bearerToken()?.let { token -> AuthManager.findByToken(token) }
         ?.apply { attributes.put(AuthContext.UserKey, this) }
         ?.takeIf { it.level >= minLevel }
 
 
-context(route: Route)
 fun RoutingContext.requirePermission(level: UserLevel, exception: AuthorizationException): User {
-    return call.require(route.authRepo, level) ?: throw exception
+    return call.require(level) ?: throw exception
 }
 
-context(route: Route)
-fun RoutingContext.requireUser(): User = requirePermission(UserLevel.User, PermissionDeniedException())
+fun RoutingContext.requireUser(): User = requirePermission(UserLevel.User, UnauthorizedException())
 
-context(route: Route)
-fun RoutingContext.requireAdmin(): User = requirePermission(UserLevel.Admin, UnauthorizedException())
+fun RoutingContext.requireAdmin(): User = requirePermission(UserLevel.Admin, PermissionDeniedException())

@@ -1,4 +1,4 @@
-package top.stellortus.stellar_music_server.database.auth
+package top.stellortus.stellar_music_server.db.table
 
 import org.jetbrains.exposed.sql.ReferenceOption
 import org.jetbrains.exposed.sql.Table

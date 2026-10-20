@@ -1,8 +1,7 @@
-package top.stellortus.stellar_music_server.database.playlist
+package top.stellortus.stellar_music_server.db.table
 
 import org.jetbrains.exposed.sql.ReferenceOption
 import org.jetbrains.exposed.sql.Table
-import top.stellortus.stellar_music_server.database.track.TrackTable
 
 object PlaylistTracksTable : Table("playlist_tracks") {
     val id         = integer("id").autoIncrement()

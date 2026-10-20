@@ -1,4 +1,4 @@
-package top.stellortus.stellar_music_server.database.track
+package top.stellortus.stellar_music_server.db.manager
 
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
@@ -6,30 +6,17 @@ import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.like
-import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import top.stellortus.stellar_music_common.dto.Track
+import top.stellortus.stellar_music_server.db.TrackSort
+import top.stellortus.stellar_music_server.db.table.PlaylistTracksTable
+import top.stellortus.stellar_music_server.db.table.PlaylistsTable
+import top.stellortus.stellar_music_server.db.table.TrackTable
 import top.stellortus.stellar_music_server.exceptions.ResourceNotExistException
-import java.io.File
 
-class TrackRepository(private val json: Json = Json) {
+object TrackManager : DatabaseManager("tracks.db", TrackTable) {
 
-    lateinit var database: Database
-        private set
-
-    fun init(dbPath: String) {
-        File(dbPath).parentFile?.mkdirs()
-        database = Database.connect(
-            url = "jdbc:sqlite:$dbPath",
-            driver = "org.sqlite.JDBC",
-            setupConnection = { connection ->
-                connection.createStatement().use { it.execute("PRAGMA foreign_keys = ON") }
-            }
-        )
-        transaction(database) {
-            SchemaUtils.create(TrackTable)
-        }
-    }
+    private val json: Json = Json
 
     fun upload(track: Track): Track = transaction(database) {
         val newId = TrackTable.insert {
@@ -129,6 +116,19 @@ class TrackRepository(private val json: Json = Json) {
     } ?: throw ResourceNotExistException("id为 $id 的歌曲")
 
     fun delete(id: Int): Boolean = transaction(database) {
+        val playlistIds = PlaylistTracksTable
+            .select(PlaylistTracksTable.playlistId)
+            .where { PlaylistTracksTable.trackId eq id }
+            .map { it[PlaylistTracksTable.playlistId] }
+
+        if (playlistIds.isNotEmpty()) {
+            PlaylistsTable.update({ PlaylistsTable.id inList playlistIds }) {
+                with(SqlExpressionBuilder) {
+                    it[trackCount] = trackCount - 1
+                }
+                it[updatedAt] = System.currentTimeMillis()
+            }
+        }
         TrackTable.deleteWhere { TrackTable.id eq id } > 0
     }
 

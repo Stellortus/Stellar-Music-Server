@@ -106,6 +106,19 @@
   td.actions button { padding: 4px 9px; font-size: 12px; margin-left: 4px; }
   td select { width: auto; min-width: 110px; padding: 4px 8px; }
   .empty { color: var(--muted); padding: 24px; text-align: center; }
+  .log-output {
+    margin: 0;
+    padding: 16px;
+    min-height: 360px;
+    max-height: 70vh;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font: 13px/1.6 Consolas, monospace;
+  }
 
   /* 提示条 */
   #toast {
@@ -178,6 +191,7 @@
     <button data-tab="tracks" class="active">歌曲</button>
     <button data-tab="users">用户</button>
     <button data-tab="playlists">歌单</button>
+    <button data-tab="logs">日志</button>
   </nav>
 
   <main>
@@ -210,6 +224,15 @@
         <span class="count" id="playlist-count"></span>
       </div>
       <div id="playlist-body"></div>
+    </section>
+
+    <section id="tab-logs" hidden>
+      <div class="toolbar">
+        <button id="log-refresh">刷新</button>
+        <span class="count" id="log-status" role="status"></span>
+      </div>
+      <pre class="log-output" id="log-body" tabindex="0" aria-label="服务器日志">点击日志标签页加载日志</pre>
+      <div class="hint">每 1 秒自动更新，最多读取末尾 256 KiB；向上滚动可暂停跟随到底部。</div>
     </section>
   </main>
 </div>
@@ -299,6 +322,10 @@
   // ---- 登录 / 登出 ----
 
   function showLogin(msg) {
+    stopLogTracking();
+    logLoaded = false;
+    $('#log-body').textContent = '';
+    $('#log-status').textContent = '';
     $('#app').hidden = true;
     $('#login').hidden = false;
     $('#login-msg').textContent = msg || '';
@@ -310,6 +337,7 @@
     $('#app').hidden = false;
     $('#me-name').textContent = state.meta.me.username;
     $('#me-level').textContent = levelName(state.meta.me.level);
+    startLogTracking();
   }
 
   $('#login-form').addEventListener('submit', function (e) {
@@ -352,11 +380,65 @@
         b.classList.toggle('active', b === btn);
       });
       var tab = btn.getAttribute('data-tab');
-      ['tracks', 'users', 'playlists'].forEach(function (name) {
+      ['tracks', 'users', 'playlists', 'logs'].forEach(function (name) {
         $('#tab-' + name).hidden = (name !== tab);
       });
+      startLogTracking();
     });
   });
+
+  // ---- 日志 ----
+
+  var logTimer = null;
+  var logLoaded = false;
+
+  function stopLogTracking() {
+    clearInterval(logTimer);
+    logTimer = null;
+  }
+
+  function startLogTracking() {
+    stopLogTracking();
+    if (document.hidden || $('#app').hidden || $('#tab-logs').hidden) return;
+    loadLogs().catch(function () {});
+    logTimer = setInterval(function () {
+      loadLogs().catch(function () {});
+    }, 1000);
+  }
+
+  document.addEventListener('visibilitychange', startLogTracking);
+  window.addEventListener('pagehide', stopLogTracking);
+  window.addEventListener('pageshow', startLogTracking);
+
+  function loadLogs() {
+    if ($('#log-refresh').disabled) return Promise.resolve();
+    var requestToken = token();
+    $('#log-refresh').disabled = true;
+    if (!logLoaded) $('#log-status').textContent = '加载中…';
+    return api('/admin/api/logs').then(function (data) {
+      if (token() !== requestToken || $('#app').hidden) return;
+      var output = $('#log-body');
+      var follow = !logLoaded || output.scrollHeight - output.scrollTop - output.clientHeight <= 24;
+      var scrollTop = output.scrollTop;
+      var content = data.content || '暂无日志';
+      if (output.textContent !== content) output.textContent = content;
+      output.scrollTop = follow ? output.scrollHeight : scrollTop;
+      logLoaded = true;
+      $('#log-status').textContent = '更新于 ' + new Date().toLocaleTimeString() +
+        (data.truncated ? ' · 仅显示末尾 256 KiB' : '');
+    }).catch(function (error) {
+      if (token() === requestToken && !$('#app').hidden) {
+        if (!logLoaded) $('#log-body').textContent = '日志加载失败，正在自动重试';
+        $('#log-status').textContent = error.message;
+      }
+      if (error.status === 401 || error.status === 403) stopLogTracking();
+      throw error;
+    }).finally(function () {
+      $('#log-refresh').disabled = false;
+    });
+  }
+
+  $('#log-refresh').addEventListener('click', function () { loadLogs().catch(handleErr); });
 
   // ---- 歌曲 ----
 
@@ -554,7 +636,9 @@
     var rows = p.items.map(function (pl) {
       return '<tr>' +
         '<td>' + pl.id + '</td>' +
+        '<td>' + esc(pl.ownerId) + '</td>' +
         '<td>' + esc(pl.name) + '</td>' +
+        '<td><span class="badge">' + (pl.public ? '公开' : '私有') + '</span></td>' +
         '<td class="meta">' + esc(pl.description || '') + '</td>' +
         '<td>' + pl.trackCount + '</td>' +
         '<td class="actions">' +
@@ -566,7 +650,7 @@
     }).join('');
 
     $('#playlist-body').innerHTML =
-      '<table><thead><tr><th>ID</th><th>名称</th><th>简介</th><th>曲目数</th><th></th></tr></thead>' +
+      '<table><thead><tr><th>ID</th><th>ownerId</th><th>名称</th><th>是否公开</th><th>简介</th><th>曲目数</th><th></th></tr></thead>' +
       '<tbody>' + rows + '</tbody></table>';
 
     Array.prototype.forEach.call($('#playlist-body').querySelectorAll('[data-view-playlist]'), function (b) {

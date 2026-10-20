@@ -3,32 +3,17 @@ package top.stellortus.stellar_music_server.routes
 import io.ktor.http.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import top.stellortus.stellar_music_common.dto.AdminMetaResponse
-import top.stellortus.stellar_music_common.dto.LevelOption
-import top.stellortus.stellar_music_common.dto.MessageResponse
-import top.stellortus.stellar_music_common.dto.PlaylistListResponse
-import top.stellortus.stellar_music_common.dto.TrackListResponse
-import top.stellortus.stellar_music_common.dto.UpdatePlaylistRequest
-import top.stellortus.stellar_music_common.dto.UpdateTrackRequest
-import top.stellortus.stellar_music_common.dto.UpdateUserLevelRequest
-import top.stellortus.stellar_music_common.dto.UserLevel
-import top.stellortus.stellar_music_common.dto.UserListResponse
-import top.stellortus.stellar_music_common.dto.toDetailResponse
-import top.stellortus.stellar_music_common.dto.toResponse
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import top.stellortus.stellar_music_common.dto.*
+import top.stellortus.stellar_music_server.db.manager.AuthManager
+import top.stellortus.stellar_music_server.db.manager.PlaylistManager
+import top.stellortus.stellar_music_server.db.manager.TrackManager
 import top.stellortus.stellar_music_server.util.PathSafety
-import top.stellortus.stellar_music_server.util.extensions.authRepo
-import top.stellortus.stellar_music_server.util.extensions.id
-import top.stellortus.stellar_music_server.util.extensions.info
-import top.stellortus.stellar_music_server.util.extensions.ok
-import top.stellortus.stellar_music_server.util.extensions.playlistRepo
-import top.stellortus.stellar_music_server.util.extensions.requireAdmin
-import top.stellortus.stellar_music_server.util.extensions.trackId
-import top.stellortus.stellar_music_server.util.extensions.trackRepo
-import top.stellortus.stellar_music_server.util.extensions.tracksDir
-import top.stellortus.stellar_music_server.util.extensions.tryReceive
-import top.stellortus.stellar_music_server.util.extensions.warn
+import top.stellortus.stellar_music_server.util.extensions.*
+import top.stellortus.stellar_music_server.util.readLogTail
 import java.io.File
-import kotlin.collections.filter
+import java.io.FileNotFoundException
 import kotlin.enums.enumEntries
 
 private const val DEFAULT_PAGE_SIZE = 50
@@ -41,6 +26,17 @@ fun Route.adminRoutes() {
     get("/admin") { call.respondText(adminPageHtml, ContentType.Text.Html.withCharset(Charsets.UTF_8)) }
 
     route("/admin/api") {
+
+        get("/logs") {
+            requireAdmin()
+            call.response.header(HttpHeaders.CacheControl, "no-store")
+            val snapshot = try {
+                withContext(Dispatchers.IO) { readLogTail(File("app.log")) }
+            } catch (_: FileNotFoundException) {
+                return@get call.respond(HttpStatusCode.NotFound, MessageResponse("日志文件不存在或无法读取"))
+            }
+            call.respond(snapshot)
+        }
 
         get("/meta") {
             val me = requireAdmin()
@@ -62,15 +58,14 @@ fun Route.adminRoutes() {
             val limit = (call.request.queryParameters["limit"]?.toIntOrNull() ?: DEFAULT_PAGE_SIZE)
                 .coerceIn(1, MAX_PAGE_SIZE)
 
-            val items = trackRepo.search(keyword, offset, limit)
-            val total = trackRepo.count(keyword)
+            val items = TrackManager.search(keyword, offset, limit)
+            val total = TrackManager.count(keyword)
             call.info("后台歌曲列表: query=${keyword ?: "-"} offset=$offset limit=$limit 返回=${items.size}/$total")
             call.respond(TrackListResponse(items, total))
         }
 
         patch("/tracks/{id}") {
             requireAdmin()
-
             val id = call.id
 
             val request = call.tryReceive<UpdateTrackRequest>()
@@ -87,7 +82,7 @@ fun Route.adminRoutes() {
                 return@patch call.respond(HttpStatusCode.BadRequest, MessageResponse("歌手不能为空"))
             }
 
-            val updated = trackRepo.update(id, request.title, request.artists, request.coverPath, request.lyricsPath)
+            val updated = TrackManager.update(id, request.title, request.artists, request.coverPath, request.lyricsPath)
             if (!updated) {
                 return@patch call.respond(HttpStatusCode.NotFound, MessageResponse("曲目不存在"))
             }
@@ -100,8 +95,8 @@ fun Route.adminRoutes() {
             requireAdmin()
 
             val id = call.id
-            val song = trackRepo.get(id)
-            trackRepo.delete(id)
+            val song = TrackManager.get(id)
+            TrackManager.delete(id)
 
             val fileDeleted = PathSafety.resolveWithin(tracksDir, song.fileName)
                 ?.takeIf(File::exists)?.delete() ?: false
@@ -113,7 +108,7 @@ fun Route.adminRoutes() {
         get("/users") {
             requireAdmin()
             val keyword = call.request.queryParameters["query"]
-            val users = authRepo.listUsers(keyword)
+            val users = AuthManager.listUsers(keyword)
             call.info("后台用户列表: query=${keyword ?: "-"} 返回=${users.size}")
             call.respond(UserListResponse(users, users.size))
         }
@@ -122,10 +117,9 @@ fun Route.adminRoutes() {
             val actor = requireAdmin()
 
             val id = call.id
-
             val request = call.tryReceive<UpdateUserLevelRequest>()
 
-            val target = authRepo.findById(id)
+            val target = AuthManager.findById(id)
                 ?: return@patch call.respond(HttpStatusCode.NotFound, MessageResponse("用户不存在"))
 
             val newLevel = enumEntries<UserLevel>().firstOrNull { it.value == request.level }
@@ -159,7 +153,7 @@ fun Route.adminRoutes() {
                 )
             }
 
-            authRepo.setLevel(id, newLevel)
+            AuthManager.setLevel(id, newLevel)
             call.info(
                 "后台修改等级: actor=${actor.username}(${actor.level.name}) " +
                         "target=${target.username} ${target.level.name} -> ${newLevel.name}"
@@ -171,22 +165,22 @@ fun Route.adminRoutes() {
             requireAdmin()
 
             val keyword = call.request.queryParameters["query"]?.trim().orEmpty()
-            val all = playlistRepo.listAll()
+            val all = PlaylistManager.listAll()
             val filtered = if (keyword.isEmpty()) {
                 all
             } else {
-                all.filter { it.playlist.name.contains(keyword, ignoreCase = true) }
+                all.filter { it.name.contains(keyword, ignoreCase = true) }
             }
 
             call.info("后台歌单列表: query=${keyword.ifEmpty { "-" }} 返回=${filtered.size}/${all.size}")
-            call.respond(PlaylistListResponse(filtered.map { it.toResponse() }, filtered.size))
+            call.respond(PlaylistListResponse(filtered, filtered.size))
         }
 
         get("/playlists/{id}") {
             requireAdmin()
             val id = call.id
-            val playlist = playlistRepo.get(id)
-            call.respond(playlist.toDetailResponse(playlistRepo.tracksOf(id)))
+            val playlist = PlaylistManager.get(id)
+            call.respond(playlist.toDetailResponse(PlaylistManager.tracksOf(id)))
         }
 
         patch("/playlists/{id}") {
@@ -202,17 +196,17 @@ fun Route.adminRoutes() {
                 return@patch call.respond(HttpStatusCode.BadRequest, MessageResponse("歌单名不能为空"))
             }
 
-            playlistRepo.update(id, request.name, request.description, request.coverPath)
+            PlaylistManager.update(id, request)
 
-            val playlist = playlistRepo.get(id)
+            val playlist = PlaylistManager.get(id)
             call.info("后台修改歌单: id=$id name=${playlist.name}")
-            call.respond(playlist.toResponse(playlistRepo.countTracks(id)))
+            call.respond(playlist)
         }
 
         delete("/playlists/{id}") {
             requireAdmin()
             val id = call.id
-            playlistRepo.delete(id)
+            PlaylistManager.delete(id)
             call.info("后台删除歌单: id=$id")
             call.ok()
         }
@@ -221,7 +215,7 @@ fun Route.adminRoutes() {
             requireAdmin()
             val id = call.id
             val trackId = call.trackId
-            val removed = playlistRepo.removeTrack(id, trackId)
+            val removed = PlaylistManager.removeTrack(id, trackId)
             call.info("后台歌单移除曲目: id=$id trackId=$trackId 实际移除=$removed")
             call.ok()
         }

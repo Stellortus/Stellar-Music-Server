@@ -8,7 +8,11 @@ import top.stellortus.stellar_music_common.dto.LoginRequest
 import top.stellortus.stellar_music_common.dto.MessageResponse
 import top.stellortus.stellar_music_common.dto.RegisterRequest
 import top.stellortus.stellar_music_server.auth.TokenGenerator
-import top.stellortus.stellar_music_server.util.extensions.*
+import top.stellortus.stellar_music_server.db.manager.AuthManager
+import top.stellortus.stellar_music_server.util.extensions.bearerToken
+import top.stellortus.stellar_music_server.util.extensions.passwordHasher
+import top.stellortus.stellar_music_server.util.extensions.requireUser
+import top.stellortus.stellar_music_server.util.extensions.tryReceive
 
 fun Route.authRoutes() {
 
@@ -25,16 +29,16 @@ fun Route.authRoutes() {
                     MessageResponse("用户名和密码不能为空")
                 )
             }
-            if (authRepo.findByUsername(username) != null) {
+            if (AuthManager.findByUsername(username) != null) {
                 return@post call.respond(
                     HttpStatusCode.Conflict,
                     MessageResponse("用户名已存在")
                 )
             }
 
-            val user = authRepo.createUser(username, passwordHasher.hash(password))
+            val user = AuthManager.createUser(username, passwordHasher.hash(password))
             val token = TokenGenerator.generate()
-            authRepo.createSession(user.id, token)
+            AuthManager.createSession(user.id, token)
             call.respond(HttpStatusCode.OK, AuthResponse(token, user))
         }
 
@@ -43,7 +47,7 @@ fun Route.authRoutes() {
             val username = req.username
             val password = req.password
 
-            val credentials = username.takeIf { it.isNotEmpty() }?.let { authRepo.findCredentials(it) }
+            val credentials = username.takeIf { it.isNotEmpty() }?.let { AuthManager.findCredentials(it) }
             val user = credentials?.first
             val hash = credentials?.second
 
@@ -58,7 +62,7 @@ fun Route.authRoutes() {
             }
 
             val token = TokenGenerator.generate()
-            authRepo.createSession(user.id, token)
+            AuthManager.createSession(user.id, token)
             call.respond(HttpStatusCode.OK, AuthResponse(token, user))
         }
 
@@ -68,7 +72,7 @@ fun Route.authRoutes() {
         }
 
         post("/logout") {
-            call.bearerToken()?.let { authRepo.deleteSession(it) }
+            call.bearerToken()?.let { AuthManager.deleteSession(it) }
             call.respond(HttpStatusCode.OK, MessageResponse("ok"))
         }
     }
