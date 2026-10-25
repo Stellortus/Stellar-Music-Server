@@ -13,9 +13,7 @@ import kotlinx.serialization.json.Json
 import top.stellortus.stellar_music_common.dto.MessageResponse
 import top.stellortus.stellar_music_server.auth.Argon2PasswordHasher
 import top.stellortus.stellar_music_server.config.AppPaths.mediaDir
-import top.stellortus.stellar_music_server.db.TrackSort
 import top.stellortus.stellar_music_server.db.manager.DatabaseManager
-import top.stellortus.stellar_music_server.db.manager.TrackManager
 import top.stellortus.stellar_music_server.exceptions.IllegalParamsException
 import top.stellortus.stellar_music_server.exceptions.PermissionDeniedException
 import top.stellortus.stellar_music_server.exceptions.ResourceNotExistException
@@ -25,7 +23,6 @@ import top.stellortus.stellar_music_server.util.extensions.RouteDependencies
 import top.stellortus.stellar_music_server.util.extensions.error
 import top.stellortus.stellar_music_server.util.extensions.installRouteDependencies
 import java.io.File
-import kotlin.enums.enumEntries
 
 fun Application.configureRouting() {
     DatabaseManager.initDb()
@@ -89,13 +86,6 @@ fun Application.configureRouting() {
         trackRoutes()
         playlistRoutes()
         adminRoutes()
-        get("/track_list") {
-            val sortParam = call.request.queryParameters["sort"]
-            val start = call.request.queryParameters["start"]?.toIntOrNull() ?: 0
-            val sort = enumEntries<TrackSort>().firstOrNull { it.name == sortParam }
-            val songList = TrackManager.top(10, sort, start = start)
-            call.application.log.info("曲目列表: sort=$sortParam 返回=${songList.size} 首")
-            call.respond(songList)
-        }
+        trackListRoutes()
     }
 }

@@ -1,3 +1,5 @@
+@file:Suppress("SpellCheckingInspection")
+
 package top.stellortus.stellar_music_server.db.manager
 
 import kotlinx.serialization.builtins.ListSerializer

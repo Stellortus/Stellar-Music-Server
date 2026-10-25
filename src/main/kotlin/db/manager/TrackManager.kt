@@ -1,3 +1,5 @@
+@file:Suppress("SpellCheckingInspection")
+
 package top.stellortus.stellar_music_server.db.manager
 
 import kotlinx.serialization.builtins.ListSerializer
@@ -30,6 +32,13 @@ object TrackManager : DatabaseManager("tracks.db", TrackTable) {
         } get TrackTable.id
 
         track.copy(id = newId)
+    }
+
+    fun listAll(): List<Track> = transaction(database) {
+        TrackTable.selectAll()
+            .orderBy(PlaylistsTable.updatedAt to SortOrder.DESC)
+            .map { it.toTrack() }
+
     }
 
     fun top(limit: Int, sort: TrackSort?, start: Int = 0): List<Track> = transaction(database) {
@@ -142,4 +151,22 @@ object TrackManager : DatabaseManager("tracks.db", TrackTable) {
         lyricsPath = this[TrackTable.lyricsPath],
         createdAt = this[TrackTable.createdAt]
     )
+
+    /**
+     * `searchKey` may contain spaces
+     * The search result **must** ignore spaces or the difference between upper/lowercase letters
+     * e.g. for `searchKey="hello world"`, the following names match the `searchKey`:
+     *  - HelloWorld
+     *  - HeLlO WorLD
+     *  - hellOWorLd
+     */
+    fun search(searchKey: String): List<Track> {
+        val keyword = searchKey.filterNot { it.isWhitespace() }
+        return listAll()
+            .filter {
+                it.title.
+                filterNot { char -> char.isWhitespace() }
+                    .contains(keyword, ignoreCase = true)
+            }
+    }
 }
